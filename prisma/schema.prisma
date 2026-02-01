@@ -1,0 +1,150 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum Role {
+  SIMPLE_RECIPIENT // Immediate access after email verification
+  NGO_RECIPIENT    // Needs org verification via NGOProfile
+  FOOD_SUPPLIER    // Needs org verification via SupplierProfile
+  ADMIN            // Internal only - never self-assignable
+}
+
+enum KycDocType {
+  NGO_REGISTRATION
+  TAX_CERTIFICATE
+  BUSINESS_LICENSE
+  ID_PROOF
+  ADDRESS_PROOF
+}
+
+enum KycStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ============================================================================
+// MODELS
+// ============================================================================
+
+model User {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  passwordHash    String
+  name            String?
+  role            Role     @default(SIMPLE_RECIPIENT)
+  isEmailVerified Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  refreshTokens   RefreshToken[]
+  otp             Otp?
+  ngoProfile      NGOProfile?
+  supplierProfile SupplierProfile?
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+  userAgent String?
+  ipAddress String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}
+
+model Otp {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  otpHash   String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("otps")
+}
+
+// ============================================================================
+// ROLE-SPECIFIC PROFILES
+// ============================================================================
+
+model NGOProfile {
+  id           String    @id @default(uuid())
+  userId       String    @unique
+  orgName      String
+  isVerified   Boolean   @default(false)
+  verifiedAt   DateTime?
+  verifiedBy   String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kycDocuments KycDocument[]
+
+  @@map("ngo_profiles")
+}
+
+model SupplierProfile {
+  id           String    @id @default(uuid())
+  userId       String    @unique
+  businessName String
+  isVerified   Boolean   @default(false)
+  verifiedAt   DateTime?
+  verifiedBy   String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kycDocuments KycDocument[]
+
+  @@map("supplier_profiles")
+}
+
+// ============================================================================
+// KYC DOCUMENTS
+// ============================================================================
+
+model KycDocument {
+  id                String    @id @default(uuid())
+  ngoProfileId      String?
+  supplierProfileId String?
+  docType           KycDocType
+  documentUrl       String    // Cloudinary URL
+  status            KycStatus @default(PENDING)
+  reviewedAt        DateTime?
+  reviewedBy        String?
+  rejectionReason   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  ngoProfile      NGOProfile?      @relation(fields: [ngoProfileId], references: [id], onDelete: Cascade)
+  supplierProfile SupplierProfile? @relation(fields: [supplierProfileId], references: [id], onDelete: Cascade)
+
+  @@index([ngoProfileId])
+  @@index([supplierProfileId])
+  @@map("kyc_documents")
+}
