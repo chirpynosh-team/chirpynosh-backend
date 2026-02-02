@@ -1,5 +1,10 @@
 import { Router } from 'express';
 import authRoutes from './auth.routes';
+import kycRoutes from './kyc.routes';
+import adminRoutes from './admin.routes';
+import listingRoutes from './listing.routes';
+import hubRoutes from './hub.routes';
+import claimRoutes from './claim.routes';
 
 /**
  * Central Route Aggregator
@@ -21,5 +26,20 @@ router.get('/health', (_req, res) => {
 
 // Auth routes - /api/auth/*
 router.use('/auth', authRoutes);
+
+// KYC routes - /api/kyc/* (organization KYC management)
+router.use('/kyc', kycRoutes);
+
+// Admin routes - /api/admin/* (admin management)
+router.use('/admin', adminRoutes);
+
+// Food Listing routes - /api/listings/* (supplier management)
+router.use('/listings', listingRoutes);
+
+// Donation Hub routes - /api/hub/* (public browsing)
+router.use('/hub', hubRoutes);
+
+// Claims routes - /api/claims/* (user claims)
+router.use('/claims', claimRoutes);
 
 export default router;

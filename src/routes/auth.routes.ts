@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import * as authController from '../controllers/auth.controller';
+import * as oauthController from '../controllers/oauth.controller';
 import { authenticate } from '../middleware/authenticate';
 import { authLimiter, strictLimiter } from '../middleware/rateLimiter';
 import { validate } from '../middleware/validate';
 import { signupSchema, signinSchema } from '../schema/auth.schema';
 import { verifyOtpSchema, resendOtpSchema } from '../schema/otp.schema';
+import { googleAuthSchema, linkGoogleSchema } from '../schema/oauth.schema';
 
 /**
  * Auth Routes
@@ -12,6 +14,10 @@ import { verifyOtpSchema, resendOtpSchema } from '../schema/otp.schema';
  */
 
 const router = Router();
+
+// ============================================================================
+// EMAIL/PASSWORD AUTH
+// ============================================================================
 
 /**
  * POST /auth/signup
@@ -61,6 +67,39 @@ router.post(
   authController.signin
 );
 
+// ============================================================================
+// GOOGLE OAUTH
+// ============================================================================
+
+/**
+ * POST /auth/google
+ * Google OAuth signup/signin
+ * - New users: Creates account with specified role
+ * - Existing users: Signs in (role param used only for new users)
+ */
+router.post(
+  '/google',
+  authLimiter,
+  validate(googleAuthSchema),
+  oauthController.googleAuth
+);
+
+/**
+ * POST /auth/google/link
+ * Link Google account to existing email/password account
+ * Requires authentication
+ */
+router.post(
+  '/google/link',
+  authenticate,
+  validate(linkGoogleSchema),
+  oauthController.linkGoogle
+);
+
+// ============================================================================
+// TOKEN MANAGEMENT
+// ============================================================================
+
 /**
  * POST /auth/refresh
  * Refresh access token using refresh token from cookie
@@ -92,6 +131,10 @@ router.post(
   authenticate,
   authController.logoutAll
 );
+
+// ============================================================================
+// USER INFO
+// ============================================================================
 
 /**
  * GET /auth/me

@@ -1,4 +1,4 @@
-import type { Role } from '../generated/prisma/client';
+import type { Role, OrgType, OrgRole } from '../generated/prisma/client';
 
 /**
  * Authentication Types
@@ -8,6 +8,11 @@ import type { Role } from '../generated/prisma/client';
  * Allowed signup roles (ADMIN excluded)
  */
 export type AllowedSignupRole = 'SIMPLE_RECIPIENT' | 'NGO_RECIPIENT' | 'FOOD_SUPPLIER';
+
+/**
+ * Auth provider types
+ */
+export type AuthProviderType = 'EMAIL' | 'GOOGLE';
 
 /**
  * JWT Token Payload
@@ -22,12 +27,21 @@ export interface TokenPayload {
 }
 
 /**
- * Signup Input
+ * Signup Input (Email/Password)
  */
 export interface SignupInput {
   email: string;
   password: string;
   name?: string | undefined;
+  role: AllowedSignupRole;
+  organizationName?: string | undefined;
+}
+
+/**
+ * Google OAuth Signup Input
+ */
+export interface GoogleSignupInput {
+  googleToken: string;
   role: AllowedSignupRole;
   organizationName?: string | undefined;
 }
@@ -49,12 +63,14 @@ export interface AuthTokens {
 }
 
 /**
- * Profile verification status (for NGO/Supplier)
+ * Organization info for user response
  */
-export interface ProfileStatus {
+export interface OrgInfo {
+  id: string;
+  name: string;
+  type: OrgType;
   isVerified: boolean;
-  orgName: string;
-  verifiedAt: Date | null;
+  userRole: OrgRole;
 }
 
 /**
@@ -65,8 +81,10 @@ export interface SafeUser {
   email: string;
   name: string | null;
   role: Role;
+  avatar: string | null;
+  authProvider: AuthProviderType;
   isEmailVerified: boolean;
-  profileStatus: ProfileStatus | null; // null for SIMPLE_RECIPIENT
+  organization: OrgInfo | null; // null for SIMPLE_RECIPIENT
   createdAt: Date;
   updatedAt: Date;
 }
@@ -77,4 +95,15 @@ export interface SafeUser {
 export interface AuthResponse {
   user: SafeUser;
   message: string;
+}
+
+/**
+ * Google user info from token verification
+ */
+export interface GoogleUserInfo {
+  googleId: string;
+  email: string;
+  name: string | null;
+  avatar: string | null;
+  emailVerified: boolean;
 }

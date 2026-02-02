@@ -23,6 +23,21 @@ const envSchema = z.object({
 
   // Frontend
   FRONTEND_URL: z.string().url().default('http://localhost:3000'),
+
+  // Email (SMTP)
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().default('587').transform(Number),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+
+  // Google OAuth
+  GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required for OAuth'),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+
+  // Cloudinary (for KYC document uploads)
+  CLOUDINARY_CLOUD_NAME: z.string().min(1, 'CLOUDINARY_CLOUD_NAME is required'),
+  CLOUDINARY_API_KEY: z.string().min(1, 'CLOUDINARY_API_KEY is required'),
+  CLOUDINARY_API_SECRET: z.string().min(1, 'CLOUDINARY_API_SECRET is required'),
 });
 
 /**

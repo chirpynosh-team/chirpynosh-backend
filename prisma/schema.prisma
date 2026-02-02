@@ -16,46 +16,68 @@ datasource db {
 
 enum Role {
   SIMPLE_RECIPIENT // Immediate access after email verification
-  NGO_RECIPIENT    // Needs org verification via NGOProfile
-  FOOD_SUPPLIER    // Needs org verification via SupplierProfile
+  NGO_RECIPIENT    // Needs org verification
+  FOOD_SUPPLIER    // Needs org verification
   ADMIN            // Internal only - never self-assignable
 }
 
-enum KycDocType {
-  NGO_REGISTRATION
-  TAX_CERTIFICATE
-  BUSINESS_LICENSE
-  ID_PROOF
-  ADDRESS_PROOF
+enum AuthProvider {
+  EMAIL
+  GOOGLE
+}
+
+enum OrgType {
+  NGO
+  SUPPLIER
+}
+
+enum OrgRole {
+  OWNER   // Full control, created the org
+  MANAGER // Can manage members
+  MEMBER  // Basic access
 }
 
 enum KycStatus {
-  PENDING
-  APPROVED
-  REJECTED
+  NOT_SUBMITTED // Initial state - no KYC submitted yet
+  PENDING       // Submitted, awaiting admin review
+  APPROVED      // Admin approved
+  REJECTED      // Admin rejected, can resubmit
 }
 
 // ============================================================================
-// MODELS
+// USER & AUTH MODELS
 // ============================================================================
 
 model User {
-  id              String   @id @default(uuid())
-  email           String   @unique
-  passwordHash    String
+  id              String       @id @default(uuid())
+  email           String       @unique
+  passwordHash    String?      // Null for OAuth-only users
   name            String?
-  role            Role     @default(SIMPLE_RECIPIENT)
-  isEmailVerified Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  role            Role         @default(SIMPLE_RECIPIENT)
+  isEmailVerified Boolean      @default(false)
 
-  refreshTokens   RefreshToken[]
-  otp             Otp?
-  ngoProfile      NGOProfile?
-  supplierProfile SupplierProfile?
+  // OAuth
+  googleId     String?      @unique
+  authProvider AuthProvider @default(EMAIL)
+  avatar       String?
+
+  // Account Restriction (Admin control)
+  isRestricted      Boolean   @default(false)
+  restrictedAt      DateTime?
+  restrictedBy      String?   // Admin user ID who restricted
+  restrictionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens  RefreshToken[]
+  otp            Otp?
+  orgMemberships OrgMember[]
+  claims         FoodClaim[]     // Food claims made by this user
 
   @@map("users")
 }
+
 
 model RefreshToken {
   id        String    @id @default(uuid())
@@ -89,62 +111,189 @@ model Otp {
 }
 
 // ============================================================================
-// ROLE-SPECIFIC PROFILES
+// ORGANIZATION MODELS (Unified)
 // ============================================================================
 
-model NGOProfile {
-  id           String    @id @default(uuid())
-  userId       String    @unique
-  orgName      String
-  isVerified   Boolean   @default(false)
-  verifiedAt   DateTime?
-  verifiedBy   String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+model Organization {
+  id         String    @id @default(uuid())
+  type       OrgType
+  name       String
+  isVerified Boolean   @default(false)
+  verifiedAt DateTime?
+  verifiedBy String?   // Admin user ID who verified
 
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  kycDocuments KycDocument[]
+  // Account Restriction (Admin control)
+  isRestricted      Boolean   @default(false)
+  restrictedAt      DateTime?
+  restrictedBy      String?   // Admin user ID who restricted
+  restrictionReason String?
 
-  @@map("ngo_profiles")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  members      OrgMember[]
+  kyc          KycSubmission?  // One-to-one KYC submission
+  listings     FoodListing[]   // Food listings (for SUPPLIER orgs)
+  claimsAsOrg  FoodClaim[]     // Claims made as NGO
+
+  @@index([type])
+  @@index([isVerified])
+  @@index([isRestricted])
+  @@map("organizations")
 }
 
-model SupplierProfile {
-  id           String    @id @default(uuid())
-  userId       String    @unique
-  businessName String
-  isVerified   Boolean   @default(false)
-  verifiedAt   DateTime?
-  verifiedBy   String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
 
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  kycDocuments KycDocument[]
+model OrgMember {
+  id        String   @id @default(uuid())
+  userId    String
+  orgId     String
+  orgRole   OrgRole  @default(MEMBER)
+  invitedBy String?
+  joinedAt  DateTime @default(now())
 
-  @@map("supplier_profiles")
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, orgId])
+  @@index([userId])
+  @@index([orgId])
+  @@map("org_members")
 }
 
 // ============================================================================
-// KYC DOCUMENTS
+// KYC SUBMISSION (One per Organization)
 // ============================================================================
 
-model KycDocument {
-  id                String    @id @default(uuid())
-  ngoProfileId      String?
-  supplierProfileId String?
-  docType           KycDocType
-  documentUrl       String    // Cloudinary URL
-  status            KycStatus @default(PENDING)
-  reviewedAt        DateTime?
-  reviewedBy        String?
-  rejectionReason   String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+model KycSubmission {
+  id     String    @id @default(uuid())
+  orgId  String    @unique  // One KYC submission per organization
+  status KycStatus @default(NOT_SUBMITTED)
 
-  ngoProfile      NGOProfile?      @relation(fields: [ngoProfileId], references: [id], onDelete: Cascade)
-  supplierProfile SupplierProfile? @relation(fields: [supplierProfileId], references: [id], onDelete: Cascade)
+  // Business Information
+  businessRegisteredName String?  // Official registered name
+  taxId                  String?  // Tax ID / EIN / GST Number
+  phoneNumber            String?  // Business contact phone
+  businessAddress        String?  // Full business address
 
-  @@index([ngoProfileId])
-  @@index([supplierProfileId])
-  @@map("kyc_documents")
+  // Document Keys (Cloudinary public_id - NOT full URLs for security)
+  taxDocumentKey         String?  // Tax certificate / registration
+  registrationDocKey     String?  // NGO registration / business registration
+  businessLicenseKey     String?  // Business license / permit
+  idProofKey             String?  // Owner ID proof
+
+  // Submission & Review
+  submittedAt     DateTime?
+  reviewedAt      DateTime?
+  reviewedBy      String?   // Admin user ID who reviewed
+  rejectionReason String?   // Reason for rejection (if rejected)
+  reviewNotes     String?   // Internal admin notes
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([status])
+  @@map("kyc_submissions")
 }
+
+// ============================================================================
+// FOOD LISTING & DONATION HUB
+// ============================================================================
+
+enum ListingStatus {
+  ACTIVE      // Available for claiming
+  PAUSED      // Temporarily disabled by supplier
+  SOLD_OUT    // All stock claimed
+  EXPIRED     // Past expiry time
+  CANCELLED   // Cancelled by supplier/admin
+}
+
+enum ClaimStatus {
+  PENDING     // Claim placed, awaiting pickup
+  COMPLETED   // Successfully picked up (OTP verified)
+  CANCELLED   // Claim cancelled
+  EXPIRED     // Pickup window passed without pickup
+}
+
+enum ClaimerType {
+  NGO
+  INDIVIDUAL
+  BOTH
+}
+
+model FoodListing {
+  id             String        @id @default(uuid())
+  orgId          String
+  title          String
+  description    String?
+  category       String        // e.g., "Cooked Meals", "Groceries", "Bakery"
+  
+  // Stock & Pricing
+  totalStock     Int           // Original quantity
+  remainingStock Int           // Available quantity
+  unit           String        // e.g., "KG", "Boxes", "Portions"
+  originalPrice  Decimal       @db.Decimal(10, 2)  // Original price per unit
+  subsidizedPrice Decimal      @db.Decimal(10, 2)  // Discounted price (can be 0 for free)
+  
+  // Who can claim
+  claimerType    ClaimerType   @default(BOTH)
+  
+  // Pickup & Expiry
+  pickupStartAt  DateTime      // Pickup window start
+  pickupEndAt    DateTime      // Pickup window end
+  expiresAt      DateTime      // Food expiry time (no claims after this)
+  
+  // Status & Media
+  status         ListingStatus @default(ACTIVE)
+  imageKeys      String[]      // Cloudinary public_ids for listing images (1-5)
+  videoKey       String?       // Cloudinary public_id for listing video (optional)
+  
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization   Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  claims         FoodClaim[]
+
+  @@index([orgId])
+  @@index([status])
+  @@index([claimerType])
+  @@index([expiresAt])
+  @@map("food_listings")
+}
+
+model FoodClaim {
+  id             String       @id @default(uuid())
+  listingId      String
+  claimerId      String
+  claimerOrgId   String?      // NGO organization ID (if claimer is NGO)
+  
+  // Claim Details
+  quantity       Int
+  unitPrice      Decimal      @db.Decimal(10, 2)  // Price at claim time
+  totalPrice     Decimal      @db.Decimal(10, 2)  // quantity × unitPrice
+  
+  // Pickup OTP (6-digit, hashed)
+  pickupOtpHash  String
+  
+  // Status
+  status         ClaimStatus  @default(PENDING)
+  pickedUpAt     DateTime?    // When OTP verified and picked up
+  cancelledAt    DateTime?
+  cancelReason   String?
+  
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  listing        FoodListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  claimer        User         @relation(fields: [claimerId], references: [id], onDelete: Cascade)
+  claimerOrg     Organization? @relation(fields: [claimerOrgId], references: [id], onDelete: SetNull)
+
+  @@index([listingId])
+  @@index([claimerId])
+  @@index([claimerOrgId])
+  @@index([status])
+  @@map("food_claims")
+}
+

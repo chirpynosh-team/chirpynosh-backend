@@ -2,11 +2,11 @@ import type { Request, Response, NextFunction } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/AppError';
 import { prisma } from '../config/prisma';
-import type { Role } from '../generated/prisma/client';
+import type { Role, OrgRole } from '../generated/prisma/client';
 
 /**
  * Authorization Middleware
- * Role-based and verification-based access control
+ * Role-based and organization-based access control
  */
 
 /**
@@ -35,7 +35,7 @@ export const requireRole = (...allowedRoles: Role[]) => {
 /**
  * Require organization verification
  * For NGO_RECIPIENT and FOOD_SUPPLIER roles
- * Checks if their profile is verified
+ * Checks if their organization is verified
  */
 export const requireOrgVerified = () => {
   return asyncHandler(
@@ -51,48 +51,62 @@ export const requireOrgVerified = () => {
         return next();
       }
 
-      // Check profile verification for NGO
-      if (role === 'NGO_RECIPIENT') {
-        const profile = await prisma.nGOProfile.findUnique({
-          where: { userId },
-          select: { isVerified: true },
-        });
+      // Check if user has a verified organization
+      const membership = await prisma.orgMember.findFirst({
+        where: { userId },
+        include: {
+          org: {
+            select: { isVerified: true },
+          },
+        },
+      });
 
-        if (!profile) {
-          throw AppError.forbidden(
-            'NGO profile not found. Please complete your profile.',
-            'PROFILE_NOT_FOUND'
-          );
-        }
-
-        if (!profile.isVerified) {
-          throw AppError.forbidden(
-            'Your NGO is pending verification. An admin will review your application.',
-            'ORG_NOT_VERIFIED'
-          );
-        }
+      if (!membership) {
+        throw AppError.forbidden(
+          'Organization not found. Please complete your profile.',
+          'ORG_NOT_FOUND'
+        );
       }
 
-      // Check profile verification for Supplier
-      if (role === 'FOOD_SUPPLIER') {
-        const profile = await prisma.supplierProfile.findUnique({
-          where: { userId },
-          select: { isVerified: true },
-        });
+      if (!membership.org.isVerified) {
+        throw AppError.forbidden(
+          'Your organization is pending verification. An admin will review your application.',
+          'ORG_NOT_VERIFIED'
+        );
+      }
 
-        if (!profile) {
-          throw AppError.forbidden(
-            'Supplier profile not found. Please complete your profile.',
-            'PROFILE_NOT_FOUND'
-          );
-        }
+      next();
+    }
+  );
+};
 
-        if (!profile.isVerified) {
-          throw AppError.forbidden(
-            'Your business is pending verification. An admin will review your application.',
-            'ORG_NOT_VERIFIED'
-          );
-        }
+/**
+ * Require specific organization role
+ * Checks if the user has one of the required roles in their organization
+ */
+export const requireOrgRole = (...allowedOrgRoles: OrgRole[]) => {
+  return asyncHandler(
+    async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+      if (!req.user) {
+        throw AppError.unauthorized('Authentication required');
+      }
+
+      const membership = await prisma.orgMember.findFirst({
+        where: { userId: req.user.userId },
+      });
+
+      if (!membership) {
+        throw AppError.forbidden(
+          'You are not a member of any organization',
+          'NOT_ORG_MEMBER'
+        );
+      }
+
+      if (!allowedOrgRoles.includes(membership.orgRole)) {
+        throw AppError.forbidden(
+          'You do not have the required organization role',
+          'INSUFFICIENT_ORG_ROLE'
+        );
       }
 
       next();
@@ -134,3 +148,15 @@ export const requireVerifiedRole = (...allowedRoles: Role[]) => {
  * Shorthand for requireRole('ADMIN')
  */
 export const requireAdmin = () => requireRole('ADMIN');
+
+/**
+ * Require org owner or manager
+ * Shorthand for org management access
+ */
+export const requireOrgManager = () => requireOrgRole('OWNER', 'MANAGER');
+
+/**
+ * Require org owner only
+ * For critical org operations
+ */
+export const requireOrgOwner = () => requireOrgRole('OWNER');

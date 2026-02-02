@@ -18,58 +18,74 @@ import {
 } from '../utils/otp';
 import { constantTimeCompare } from '../utils/crypto';
 import { sendOtpEmail } from './email.service';
-import type { SafeUser, AuthTokens, SignupInput, SigninInput, ProfileStatus } from '../types/auth.types';
-import type { Role } from '../generated/prisma/client';
+import type {
+  SafeUser,
+  AuthTokens,
+  SignupInput,
+  SigninInput,
+  OrgInfo,
+  AuthProviderType,
+} from '../types/auth.types';
+import type { Role, OrgType } from '../generated/prisma/client';
 
 /**
  * Auth Service
  * Business logic for authentication operations
  */
 
-// Type for user with profile includes
-type UserWithProfiles = {
+// Type for user with org membership includes
+type UserWithOrg = {
   id: string;
   email: string;
   name: string | null;
   role: Role;
+  avatar: string | null;
+  authProvider: 'EMAIL' | 'GOOGLE';
   isEmailVerified: boolean;
   createdAt: Date;
   updatedAt: Date;
-  ngoProfile?: { isVerified: boolean; orgName: string; verifiedAt: Date | null } | null;
-  supplierProfile?: { isVerified: boolean; businessName: string; verifiedAt: Date | null } | null;
+  orgMemberships: Array<{
+    orgRole: 'OWNER' | 'MANAGER' | 'MEMBER';
+    org: {
+      id: string;
+      name: string;
+      type: OrgType;
+      isVerified: boolean;
+    };
+  }>;
 };
 
 /**
- * Get profile status based on user role and profile
+ * Get organization info from user's memberships
  */
-const getProfileStatus = (user: UserWithProfiles): ProfileStatus | null => {
-  if (user.role === 'NGO_RECIPIENT' && user.ngoProfile) {
-    return {
-      isVerified: user.ngoProfile.isVerified,
-      orgName: user.ngoProfile.orgName,
-      verifiedAt: user.ngoProfile.verifiedAt,
-    };
+const getOrgInfo = (user: UserWithOrg): OrgInfo | null => {
+  if (user.orgMemberships.length === 0) {
+    return null;
   }
-  if (user.role === 'FOOD_SUPPLIER' && user.supplierProfile) {
-    return {
-      isVerified: user.supplierProfile.isVerified,
-      orgName: user.supplierProfile.businessName,
-      verifiedAt: user.supplierProfile.verifiedAt,
-    };
-  }
-  return null; // SIMPLE_RECIPIENT and ADMIN don't have profiles
+  
+  // Get primary org (first membership, usually OWNER)
+  const membership = user.orgMemberships[0]!;
+  return {
+    id: membership.org.id,
+    name: membership.org.name,
+    type: membership.org.type,
+    isVerified: membership.org.isVerified,
+    userRole: membership.orgRole,
+  };
 };
 
 /**
  * Format user for safe response (exclude sensitive fields)
  */
-const formatSafeUser = (user: UserWithProfiles): SafeUser => ({
+const formatSafeUser = (user: UserWithOrg): SafeUser => ({
   id: user.id,
   email: user.email,
   name: user.name,
   role: user.role,
+  avatar: user.avatar,
+  authProvider: user.authProvider as AuthProviderType,
   isEmailVerified: user.isEmailVerified,
-  profileStatus: getProfileStatus(user),
+  organization: getOrgInfo(user),
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
 });
@@ -113,7 +129,11 @@ const storeRefreshToken = async (
 /**
  * Create and send OTP to user
  */
-const createAndSendOtp = async (userId: string, email: string, name?: string | null): Promise<void> => {
+const createAndSendOtp = async (
+  userId: string,
+  email: string,
+  name?: string | null
+): Promise<void> => {
   const otp = generateOtp();
   const otpHash = hashOtp(otp);
 
@@ -137,28 +157,55 @@ const createAndSendOtp = async (userId: string, email: string, name?: string | n
 };
 
 /**
- * Create role-specific profile (NGO or Supplier)
+ * Map role to org type
  */
-const createRoleProfile = async (
+const roleToOrgType = (role: Role): OrgType | null => {
+  if (role === 'NGO_RECIPIENT') return 'NGO';
+  if (role === 'FOOD_SUPPLIER') return 'SUPPLIER';
+  return null;
+};
+
+/**
+ * Create organization and add user as OWNER
+ */
+const createOrganization = async (
   userId: string,
   role: Role,
-  organizationName: string
+  orgName: string
 ): Promise<void> => {
-  if (role === 'NGO_RECIPIENT') {
-    await prisma.nGOProfile.create({
-      data: {
-        userId,
-        orgName: organizationName,
+  const orgType = roleToOrgType(role);
+  if (!orgType) return;
+
+  await prisma.organization.create({
+    data: {
+      type: orgType,
+      name: orgName,
+      members: {
+        create: {
+          userId,
+          orgRole: 'OWNER',
+        },
       },
-    });
-  } else if (role === 'FOOD_SUPPLIER') {
-    await prisma.supplierProfile.create({
-      data: {
-        userId,
-        businessName: organizationName,
+    },
+  });
+};
+
+/**
+ * Include for user queries with org
+ */
+const userWithOrgInclude = {
+  orgMemberships: {
+    include: {
+      org: {
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          isVerified: true,
+        },
       },
-    });
-  }
+    },
+  },
 };
 
 /**
@@ -166,9 +213,7 @@ const createRoleProfile = async (
  * ❌ Does NOT issue tokens - OTP verification required first
  * ❌ ADMIN role is rejected
  */
-export const signup = async (
-  data: SignupInput
-): Promise<{ message: string }> => {
+export const signup = async (data: SignupInput): Promise<{ message: string }> => {
   // CRITICAL: Reject ADMIN role signup
   if ((data.role as string) === 'ADMIN') {
     throw AppError.forbidden('Invalid role selection', 'INVALID_ROLE');
@@ -182,10 +227,17 @@ export const signup = async (
   if (existingUser) {
     // If user exists but not verified, resend OTP
     if (!existingUser.isEmailVerified) {
-      await createAndSendOtp(existingUser.id, existingUser.email, existingUser.name);
+      await createAndSendOtp(
+        existingUser.id,
+        existingUser.email,
+        existingUser.name
+      );
       return { message: 'Verification code sent to your email' };
     }
-    throw AppError.conflict('A user with this email already exists', 'EMAIL_EXISTS');
+    throw AppError.conflict(
+      'A user with this email already exists',
+      'EMAIL_EXISTS'
+    );
   }
 
   // Hash password
@@ -198,13 +250,17 @@ export const signup = async (
       passwordHash,
       name: data.name ?? null,
       role: data.role,
+      authProvider: 'EMAIL',
       isEmailVerified: false,
     },
   });
 
-  // Create role-specific profile if needed
-  if ((data.role === 'NGO_RECIPIENT' || data.role === 'FOOD_SUPPLIER') && data.organizationName) {
-    await createRoleProfile(user.id, data.role, data.organizationName);
+  // Create organization if NGO/Supplier
+  if (
+    (data.role === 'NGO_RECIPIENT' || data.role === 'FOOD_SUPPLIER') &&
+    data.organizationName
+  ) {
+    await createOrganization(user.id, data.role, data.organizationName);
   }
 
   // Create and send OTP
@@ -222,18 +278,20 @@ export const verifyOtp = async (
   userAgent?: string,
   ipAddress?: string
 ): Promise<{ user: SafeUser; tokens: AuthTokens }> => {
-  // Find user by email with profiles
+  // Find user by email with org
   const user = await prisma.user.findUnique({
     where: { email },
     include: {
       otp: true,
-      ngoProfile: true,
-      supplierProfile: true,
+      ...userWithOrgInclude,
     },
   });
 
   if (!user || !user.otp) {
-    throw AppError.badRequest('Invalid or expired verification code', 'INVALID_OTP');
+    throw AppError.badRequest(
+      'Invalid or expired verification code',
+      'INVALID_OTP'
+    );
   }
 
   // Check if already verified
@@ -244,13 +302,19 @@ export const verifyOtp = async (
   // Check if max attempts exceeded
   if (isMaxAttemptsExceeded(user.otp.attempts)) {
     await prisma.otp.delete({ where: { userId: user.id } });
-    throw AppError.badRequest('Too many failed attempts. Please request a new code.', 'MAX_ATTEMPTS');
+    throw AppError.badRequest(
+      'Too many failed attempts. Please request a new code.',
+      'MAX_ATTEMPTS'
+    );
   }
 
   // Check if OTP expired
   if (isOtpExpired(user.otp.expiresAt)) {
     await prisma.otp.delete({ where: { userId: user.id } });
-    throw AppError.badRequest('Verification code has expired. Please request a new code.', 'OTP_EXPIRED');
+    throw AppError.badRequest(
+      'Verification code has expired. Please request a new code.',
+      'OTP_EXPIRED'
+    );
   }
 
   // Verify OTP hash
@@ -266,10 +330,7 @@ export const verifyOtp = async (
   const verifiedUser = await prisma.user.update({
     where: { id: user.id },
     data: { isEmailVerified: true },
-    include: {
-      ngoProfile: true,
-      supplierProfile: true,
-    },
+    include: userWithOrgInclude,
   });
 
   await prisma.otp.delete({ where: { userId: user.id } });
@@ -314,17 +375,25 @@ export const signin = async (
   userAgent?: string,
   ipAddress?: string
 ): Promise<{ user: SafeUser; tokens: AuthTokens }> => {
-  // Find user by email with profiles
+  // Find user by email with org
   const user = await prisma.user.findUnique({
     where: { email: data.email },
-    include: {
-      ngoProfile: true,
-      supplierProfile: true,
-    },
+    include: userWithOrgInclude,
   });
 
   if (!user) {
-    throw AppError.unauthorized('Invalid email or password', 'INVALID_CREDENTIALS');
+    throw AppError.unauthorized(
+      'Invalid email or password',
+      'INVALID_CREDENTIALS'
+    );
+  }
+
+  // Check if user has password (not OAuth-only)
+  if (!user.passwordHash) {
+    throw AppError.badRequest(
+      'Please use Google to sign in to this account',
+      'OAUTH_ACCOUNT'
+    );
   }
 
   // Check if user is email verified
@@ -339,7 +408,10 @@ export const signin = async (
   const isPasswordValid = await comparePassword(data.password, user.passwordHash);
 
   if (!isPasswordValid) {
-    throw AppError.unauthorized('Invalid email or password', 'INVALID_CREDENTIALS');
+    throw AppError.unauthorized(
+      'Invalid email or password',
+      'INVALID_CREDENTIALS'
+    );
   }
 
   const safeUser = formatSafeUser(user);
@@ -384,21 +456,15 @@ export const refreshTokens = async (
     },
     include: {
       user: {
-        include: {
-          ngoProfile: true,
-          supplierProfile: true,
-        },
+        include: userWithOrgInclude,
       },
     },
   });
 
   if (!storedToken) {
-    // Token not found or already revoked - possible replay attack
-    await prisma.refreshToken.updateMany({
-      where: { userId: payload.userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
-
+    // Token not found or already revoked
+    // Don't revoke all tokens - this could be a race condition from concurrent requests
+    // The token was likely already rotated by another request
     throw AppError.unauthorized(
       'Refresh token is invalid or has been revoked',
       'TOKEN_REVOKED'
@@ -454,10 +520,7 @@ export const logoutAll = async (userId: string): Promise<void> => {
 export const getMe = async (userId: string): Promise<SafeUser> => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: {
-      ngoProfile: true,
-      supplierProfile: true,
-    },
+    include: userWithOrgInclude,
   });
 
   if (!user) {
