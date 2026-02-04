@@ -5,6 +5,7 @@ import adminRoutes from './admin.routes';
 import listingRoutes from './listing.routes';
 import hubRoutes from './hub.routes';
 import claimRoutes from './claim.routes';
+import profileRoutes from './profile.routes';
 
 /**
  * Central Route Aggregator
@@ -26,6 +27,9 @@ router.get('/health', (_req, res) => {
 
 // Auth routes - /api/auth/*
 router.use('/auth', authRoutes);
+
+// Profile routes - /api/profile/* (user profile management)
+router.use('/profile', profileRoutes);
 
 // KYC routes - /api/kyc/* (organization KYC management)
 router.use('/kyc', kycRoutes);

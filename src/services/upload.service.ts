@@ -317,3 +317,86 @@ export const deleteListingMedia = async (
     // Don't throw - deletion failures shouldn't block operations
   }
 };
+
+// ============================================================================
+// AVATAR UPLOAD FUNCTIONS
+// ============================================================================
+
+/**
+ * Upload a user avatar to Cloudinary
+ * Avatars are stored in a public folder for easy access
+ */
+export const uploadAvatar = async (
+  fileBuffer: Buffer,
+  userId: string,
+): Promise<UploadResult> => {
+  const folder = `chirpynosh/avatars`;
+  const publicId = `${folder}/user_${userId}_${Date.now()}`;
+
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        public_id: publicId,
+        resource_type: 'image',
+        type: 'upload', // Public upload for avatars
+        overwrite: true,
+        transformation: [
+          { width: 400, height: 400, crop: 'fill', gravity: 'face' }, // Square crop focused on face
+          { quality: 'auto:good' },
+          { fetch_format: 'auto' },
+        ],
+      },
+      (error: UploadApiErrorResponse | undefined, result: UploadApiResponse | undefined) => {
+        if (error) {
+          console.error('Cloudinary avatar upload error:', error);
+          reject(AppError.internal('Failed to upload avatar'));
+          return;
+        }
+
+        if (!result) {
+          reject(AppError.internal('No upload result received'));
+          return;
+        }
+
+        resolve({
+          publicId: result.public_id,
+          format: result.format,
+          bytes: result.bytes,
+        });
+      }
+    );
+
+    uploadStream.end(fileBuffer);
+  });
+};
+
+/**
+ * Generate a public URL for avatar
+ */
+export const getAvatarUrl = (publicId: string): string => {
+  return cloudinary.url(publicId, { 
+    resource_type: 'image', 
+    secure: true,
+    transformation: [
+      { width: 200, height: 200, crop: 'fill', gravity: 'face' },
+      { quality: 'auto' },
+      { fetch_format: 'auto' },
+    ],
+  });
+};
+
+/**
+ * Delete avatar from Cloudinary
+ */
+export const deleteAvatar = async (publicId: string): Promise<void> => {
+  try {
+    await cloudinary.uploader.destroy(publicId, { 
+      type: 'upload',
+      resource_type: 'image',
+      invalidate: true,
+    });
+  } catch (error) {
+    console.error('Failed to delete avatar:', error);
+    // Don't throw - deletion failures shouldn't block operations
+  }
+};

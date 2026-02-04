@@ -91,9 +91,9 @@ const server = app.listen(env.PORT, () => {
   console.log(`
 ╔══════════════════════════════════════════════════════════╗
 ║                                                          ║
-║   🚀 Server running on port ${env.PORT}                        ║
-║   📍 Environment: ${env.NODE_ENV.padEnd(36)}║
-║   🔗 API: http://localhost:${env.PORT}/api                     ║
+║   🚀 Server running on port ${env.PORT}                  ║
+║   📍 Environment: ${env.NODE_ENV.padEnd(36)}             ║
+║   🔗 API: http://localhost:${env.PORT}/api               ║
 ║                                                          ║
 ╚══════════════════════════════════════════════════════════╝
   `);
