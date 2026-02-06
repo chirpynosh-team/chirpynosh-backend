@@ -50,6 +50,17 @@ router.get(
 );
 
 /**
+ * GET /hub/ngos - Get list of verified NGOs
+ */
+router.get(
+  '/ngos',
+  asyncHandler(async (_req, res) => {
+    const ngos = await listingService.getNGOs();
+    res.json({ success: true, ngos });
+  })
+);
+
+/**
  * GET /hub/categories - Get listing categories with counts
  */
 router.get(

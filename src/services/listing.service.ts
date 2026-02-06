@@ -527,6 +527,34 @@ export const getSuppliers = async () => {
 };
 
 /**
+ * Get list of verified NGOs
+ */
+export const getNGOs = async () => {
+  const ngos = await prisma.organization.findMany({
+    where: {
+      type: 'NGO',
+      isVerified: true,
+      isRestricted: false,
+    },
+    select: {
+      id: true,
+      name: true,
+      _count: {
+        select: {
+          claimsAsOrg: true,
+        },
+      },
+    },
+  });
+
+  return ngos.map((ngo) => ({
+    id: ngo.id,
+    name: ngo.name,
+    claimCount: ngo._count.claimsAsOrg,
+  }));
+};
+
+/**
  * Get listing categories with counts
  */
 export const getCategories = async () => {

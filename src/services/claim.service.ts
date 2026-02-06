@@ -183,6 +183,7 @@ export const getUserClaims = async (
             id: true,
             title: true,
             unit: true,
+            imageKeys: true,
             pickupStartAt: true,
             pickupEndAt: true,
             organization: { select: { id: true, name: true } },

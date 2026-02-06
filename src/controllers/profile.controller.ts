@@ -1,8 +1,7 @@
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/AppError';
 import * as profileService from '../services/profile.service';
-import type { AuthenticatedRequest } from '../middleware/authenticate';
 import type { ApiResponse, SafeUser } from '../types/index';
 
 /**
@@ -14,7 +13,7 @@ import type { ApiResponse, SafeUser } from '../types/index';
  * GET /profile
  * Get current user's profile
  */
-export const getProfile = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+export const getProfile = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   if (!req.user) {
     throw AppError.unauthorized('Authentication required');
   }
@@ -33,14 +32,20 @@ export const getProfile = asyncHandler(async (req: AuthenticatedRequest, res: Re
  * PATCH /profile
  * Update current user's profile (name)
  */
-export const updateProfile = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+export const updateProfile = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   if (!req.user) {
     throw AppError.unauthorized('Authentication required');
   }
 
   const { name } = req.body as { name?: string };
+  
+  // Build update data object, only including defined values
+  const updateData: { name?: string } = {};
+  if (name !== undefined) {
+    updateData.name = name;
+  }
 
-  const user = await profileService.updateProfile(req.user.userId, { name });
+  const user = await profileService.updateProfile(req.user.userId, updateData);
 
   const response: ApiResponse<SafeUser> = {
     success: true,
@@ -55,7 +60,7 @@ export const updateProfile = asyncHandler(async (req: AuthenticatedRequest, res:
  * POST /profile/avatar
  * Upload new avatar
  */
-export const uploadAvatar = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+export const uploadAvatar = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   if (!req.user) {
     throw AppError.unauthorized('Authentication required');
   }
@@ -91,7 +96,7 @@ export const uploadAvatar = asyncHandler(async (req: AuthenticatedRequest, res: 
  * DELETE /profile/avatar
  * Delete current avatar
  */
-export const deleteAvatar = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+export const deleteAvatar = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   if (!req.user) {
     throw AppError.unauthorized('Authentication required');
   }
@@ -111,7 +116,7 @@ export const deleteAvatar = asyncHandler(async (req: AuthenticatedRequest, res: 
  * GET /profile/stats
  * Get profile statistics
  */
-export const getProfileStats = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+export const getProfileStats = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   if (!req.user) {
     throw AppError.unauthorized('Authentication required');
   }

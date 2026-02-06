@@ -104,7 +104,7 @@ export const updateProfile = async (
   const user = await prisma.user.update({
     where: { id: userId },
     data: {
-      name: data.name,
+      ...(data.name !== undefined ? { name: data.name } : {}),
       updatedAt: new Date(),
     },
     include: {
@@ -259,9 +259,9 @@ export const getProfileStats = async (userId: string): Promise<{
   }
 
   // Get claim stats
-  const claimStats = await prisma.claim.groupBy({
+  const claimStats = await prisma.foodClaim.groupBy({
     by: ['status'],
-    where: { userId },
+    where: { claimerId: userId },
     _count: { status: true },
   });
 
@@ -281,13 +281,13 @@ export const getProfileStats = async (userId: string): Promise<{
 
   // For food suppliers, also get listing stats
   if (user.role === 'FOOD_SUPPLIER') {
-    const orgMembership = await prisma.orgMembership.findFirst({
+    const orgMembership = await prisma.orgMember.findFirst({
       where: { userId },
       select: { orgId: true },
     });
 
     if (orgMembership) {
-      const listingStats = await prisma.listing.groupBy({
+      const listingStats = await prisma.foodListing.groupBy({
         by: ['status'],
         where: { orgId: orgMembership.orgId },
         _count: { status: true },
@@ -298,7 +298,7 @@ export const getProfileStats = async (userId: string): Promise<{
 
       listingStats.forEach((stat) => {
         totalListings += stat._count.status;
-        if (stat.status === 'AVAILABLE') activeListings = stat._count.status;
+        if (stat.status === 'ACTIVE') activeListings = stat._count.status;
       });
 
       return { ...stats, totalListings, activeListings };
