@@ -3,7 +3,7 @@ import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import { env } from './config/env';
+import { env } from './config/env.js';
 import { prisma } from './config/prisma';
 import routes from './routes/index';
 import { errorHandler } from './middleware/errorHandler';
