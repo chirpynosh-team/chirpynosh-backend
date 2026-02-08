@@ -33,7 +33,7 @@ const createPrismaClient = () => {
   pool.on('error', (err) => {
     console.error('❌ PG Pool error:', JSON.stringify({
       message: err.message,
-      code: (err as Record<string, unknown>).code,
+      code: (err as unknown as Record<string, unknown>).code,
     }));
   });
   
