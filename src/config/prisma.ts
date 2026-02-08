@@ -18,6 +18,23 @@ const createPrismaClient = () => {
   const pool = new pg.Pool({ 
     connectionString,
     max: 10,
+    // Connection acquisition timeout (fail fast instead of hanging)
+    connectionTimeoutMillis: 10000,
+    // Release idle connections after 30s
+    idleTimeoutMillis: 30000,
+    // TCP keepAlive prevents AWS NAT/firewalls from killing idle connections
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
+    // Don't let the pool exit when idle
+    allowExitOnIdle: false,
+  });
+
+  // Log pool errors (dead connections, etc.)
+  pool.on('error', (err) => {
+    console.error('❌ PG Pool error:', JSON.stringify({
+      message: err.message,
+      code: (err as Record<string, unknown>).code,
+    }));
   });
   
   const adapter = new PrismaPg(pool);
