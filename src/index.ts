@@ -20,6 +20,9 @@ import './types/express.d';
 
 const app = express();
 
+// Trust first proxy (ALB/CloudFront) for correct client IP in rate limiter
+app.set('trust proxy', 1);
+
 // =============================================================================
 // SECURITY MIDDLEWARE
 // =============================================================================

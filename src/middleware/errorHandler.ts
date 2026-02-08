@@ -65,6 +65,9 @@ export const errorHandler: ErrorRequestHandler = (
   // Log error in development
   if (env.NODE_ENV === 'development') {
     console.error('❌ Error:', err);
+  } else {
+    // In production, still log the error message and stack for debugging
+    console.error('❌ Error:', err.message, err.stack);
   }
 
   let error: AppError;

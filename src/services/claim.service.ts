@@ -38,8 +38,10 @@ export const createClaim = async (userId: string, data: CreateClaimInput) => {
       status: ListingStatus.ACTIVE,
       expiresAt: { gt: new Date() },
       organization: {
-        isVerified: true,
-        isRestricted: false,
+        is: {
+          isVerified: true,
+          isRestricted: false,
+        },
       },
     },
     include: {

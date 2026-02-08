@@ -192,7 +192,7 @@ export const getAllKycSubmissions = async (filters?: {
 
   if (filters?.orgType) {
     where.organization = {
-      type: filters.orgType,
+      is: { type: filters.orgType },
     };
   }
 

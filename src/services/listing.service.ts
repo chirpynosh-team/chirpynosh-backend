@@ -16,9 +16,11 @@ export const getSupplierOrg = async (userId: string) => {
     where: {
       userId,
       org: {
-        type: 'SUPPLIER',
-        isVerified: true,
-        isRestricted: false,
+        is: {
+          type: 'SUPPLIER',
+          isVerified: true,
+          isRestricted: false,
+        },
       },
     },
     include: {
@@ -298,7 +300,7 @@ export const getSupplierClaims = async (
   const { status, listingId, page = 1, limit = 20 } = options;
 
   const where = {
-    listing: { orgId: org.id },
+    listing: { is: { orgId: org.id } },
     ...(status && { status }),
     ...(listingId && { listingId }),
   };
@@ -338,7 +340,7 @@ export const verifyPickupOtp = async (userId: string, claimId: string, otp: stri
   const claim = await prisma.foodClaim.findFirst({
     where: {
       id: claimId,
-      listing: { orgId: org.id },
+      listing: { is: { orgId: org.id } },
     },
     include: {
       listing: { select: { id: true, title: true } },
@@ -409,8 +411,10 @@ export const browseListings = async (query: BrowseListingsQuery) => {
     expiresAt: { gt: new Date() }, // Not expired
     remainingStock: { gt: 0 }, // Has stock
     organization: {
-      isVerified: true,
-      isRestricted: false,
+      is: {
+        isVerified: true,
+        isRestricted: false,
+      },
     },
   };
 
@@ -484,8 +488,10 @@ export const getPublicListingById = async (listingId: string) => {
       id: listingId,
       status: ListingStatus.ACTIVE,
       organization: {
-        isVerified: true,
-        isRestricted: false,
+        is: {
+          isVerified: true,
+          isRestricted: false,
+        },
       },
     },
     include: {

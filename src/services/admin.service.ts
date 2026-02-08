@@ -493,16 +493,17 @@ export const getKycSubmissionsPaginated = async (
     where.status = filters.status;
   }
   if (filters.orgType || filters.search) {
-    where.organization = {};
+    const orgFilter: Record<string, unknown> = {};
     if (filters.orgType) {
-      (where.organization as Record<string, unknown>).type = filters.orgType;
+      orgFilter.type = filters.orgType;
     }
     if (filters.search) {
-      (where.organization as Record<string, unknown>).name = {
+      orgFilter.name = {
         contains: filters.search,
         mode: 'insensitive',
       };
     }
+    where.organization = { is: orgFilter };
   }
 
   const [submissions, total] = await Promise.all([
