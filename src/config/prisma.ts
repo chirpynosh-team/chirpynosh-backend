@@ -5,6 +5,10 @@ import pg from 'pg';
 /**
  * Prisma Client Singleton
  * Prevents multiple instances in development with hot-reloading
+ * 
+ * Optimized for Neon's PgBouncer pooler:
+ * - Small pool size (Neon pooler handles connection multiplexing)
+ * - SSL enabled with rejectUnauthorized: false for Neon
  */
 
 declare global {
@@ -15,21 +19,15 @@ declare global {
 const createPrismaClient = () => {
   const connectionString = process.env.DATABASE_URL;
   
+  // For Neon's PgBouncer pooler, use a small pool since the pooler handles multiplexing
   const pool = new pg.Pool({ 
     connectionString,
-    max: 10,
-    // Connection acquisition timeout (fail fast instead of hanging)
-    connectionTimeoutMillis: 10000,
-    // Release idle connections after 30s
-    idleTimeoutMillis: 30000,
-    // TCP keepAlive prevents AWS NAT/firewalls from killing idle connections
-    keepAlive: true,
-    keepAliveInitialDelayMillis: 10000,
-    // Don't let the pool exit when idle
-    allowExitOnIdle: false,
+    max: 3, // Small pool - Neon pooler handles the real pooling
+    connectionTimeoutMillis: 10000, // Allow time for cold start
+    idleTimeoutMillis: 10000, // Release connections quickly
+    // SSL is parsed from DATABASE_URL (sslmode=require)
   });
 
-  // Log pool errors (dead connections, etc.)
   pool.on('error', (err) => {
     console.error('❌ PG Pool error:', JSON.stringify({
       message: err.message,
@@ -58,8 +56,8 @@ export const verifyDatabaseConnection = async () => {
     console.error('❌ Database connection failed:', JSON.stringify({
       message: (error as Error).message,
       name: (error as Error).name,
-      code: (error as Record<string, unknown>).code,
-      meta: (error as Record<string, unknown>).meta,
+      code: (error as unknown as Record<string, unknown>).code,
+      meta: (error as unknown as Record<string, unknown>).meta,
     }));
     return false;
   }
