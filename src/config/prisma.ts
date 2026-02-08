@@ -1,14 +1,13 @@
 import { PrismaClient } from '../generated/prisma/client';
+
+import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
-import pg from 'pg';
 
 /**
- * Prisma Client Singleton
- * Prevents multiple instances in development with hot-reloading
+ * Prisma Client Singleton for AWS RDS (Standard PostgreSQL)
  * 
- * Optimized for Neon's PgBouncer pooler:
- * - Small pool size (Neon pooler handles connection multiplexing)
- * - SSL enabled with rejectUnauthorized: false for Neon
+ * Uses @prisma/adapter-pg with standard TCP connection to satisfy
+ * runtime requirements while connecting to RDS.
  */
 
 declare global {
@@ -19,22 +18,19 @@ declare global {
 const createPrismaClient = () => {
   const connectionString = process.env.DATABASE_URL;
   
-  // For Neon's PgBouncer pooler, use a small pool since the pooler handles multiplexing
-  const pool = new pg.Pool({ 
-    connectionString,
-    max: 3, // Small pool - Neon pooler handles the real pooling
-    connectionTimeoutMillis: 10000, // Allow time for cold start
-    idleTimeoutMillis: 10000, // Release connections quickly
-    // SSL is parsed from DATABASE_URL (sslmode=require)
-  });
-
-  pool.on('error', (err) => {
-    console.error('❌ PG Pool error:', JSON.stringify({
-      message: err.message,
-      code: (err as unknown as Record<string, unknown>).code,
-    }));
-  });
+  console.log('🔗 Initializing Prisma with DATABASE_URL:', connectionString ? `${connectionString.substring(0, 30)}...` : 'NOT SET');
   
+  if (!connectionString) {
+    throw new Error('DATABASE_URL environment variable is not set');
+  }
+  
+  // Create pg pool for standard TCP connection
+  const pool = new Pool({ 
+    connectionString,
+    // Fix "self-signed certificate in certificate chain" error
+    ssl: { rejectUnauthorized: false }
+  });
+  // Use adapter to satisfy runtime requirement (engineType="client")
   const adapter = new PrismaPg(pool);
   
   return new PrismaClient({ adapter });
@@ -49,6 +45,7 @@ if (process.env.NODE_ENV !== 'production') {
 // Startup health check - verify Prisma client can connect
 export const verifyDatabaseConnection = async () => {
   try {
+    // Simple query to verify connection
     const result = await prisma.$queryRawUnsafe('SELECT 1 as health');
     console.log('✅ Database connection verified:', JSON.stringify(result));
     return true;
@@ -62,3 +59,4 @@ export const verifyDatabaseConnection = async () => {
     return false;
   }
 };
+
