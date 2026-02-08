@@ -27,11 +27,6 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-# Copy Prisma schema and generate client for production
-COPY prisma ./prisma
-COPY prisma.config.ts ./
-RUN npx prisma generate
-
 # Copy compiled output from build stage
 COPY --from=build /app/dist ./dist
 

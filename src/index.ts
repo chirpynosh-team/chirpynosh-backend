@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { env } from './config/env.js';
-import { prisma } from './config/prisma';
+import { prisma, verifyDatabaseConnection } from './config/prisma';
 import routes from './routes/index';
 import { errorHandler } from './middleware/errorHandler';
 import { apiLimiter } from './middleware/rateLimiter';
@@ -90,7 +90,10 @@ app.use(errorHandler);
 // SERVER STARTUP
 // =============================================================================
 
-const server = app.listen(env.PORT, () => {
+const server = app.listen(env.PORT, async () => {
+  // Verify database connection on startup
+  await verifyDatabaseConnection();
+
   console.log(`
 ╔══════════════════════════════════════════════════════════╗
 ║                                                          ║

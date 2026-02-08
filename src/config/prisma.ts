@@ -30,3 +30,20 @@ export const prisma = globalThis.prisma ?? createPrismaClient();
 if (process.env.NODE_ENV !== 'production') {
   globalThis.prisma = prisma;
 }
+
+// Startup health check - verify Prisma client can connect
+export const verifyDatabaseConnection = async () => {
+  try {
+    const result = await prisma.$queryRawUnsafe('SELECT 1 as health');
+    console.log('✅ Database connection verified:', JSON.stringify(result));
+    return true;
+  } catch (error) {
+    console.error('❌ Database connection failed:', JSON.stringify({
+      message: (error as Error).message,
+      name: (error as Error).name,
+      code: (error as Record<string, unknown>).code,
+      meta: (error as Record<string, unknown>).meta,
+    }));
+    return false;
+  }
+};

@@ -62,12 +62,21 @@ export const errorHandler: ErrorRequestHandler = (
   res: Response,
   _next: NextFunction
 ): void => {
-  // Log error in development
+  // Log error details
   if (env.NODE_ENV === 'development') {
     console.error('❌ Error:', err);
   } else {
-    // In production, still log the error message and stack for debugging
-    console.error('❌ Error:', err.message, err.stack);
+    // In production, log as single-line JSON for CloudWatch readability
+    const errorLog: Record<string, unknown> = {
+      message: err.message,
+      name: err.name,
+      stack: err.stack,
+    };
+    // Include Prisma-specific fields
+    if ('code' in err) errorLog.code = (err as PrismaError).code;
+    if ('meta' in err) errorLog.meta = (err as PrismaError).meta;
+    if ('clientVersion' in err) errorLog.clientVersion = (err as Record<string, unknown>).clientVersion;
+    console.error('❌ Error:', JSON.stringify(errorLog));
   }
 
   let error: AppError;
