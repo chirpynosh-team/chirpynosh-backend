@@ -296,4 +296,3 @@ model FoodClaim {
   @@index([status])
   @@map("food_claims")
 }
-
