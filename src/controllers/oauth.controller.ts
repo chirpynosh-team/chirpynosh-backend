@@ -17,7 +17,7 @@ import type { ApiResponse, SafeUser } from '../types/index';
 const getCookieOptions = (maxAge: number) => ({
   httpOnly: true,
   secure: env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
+  sameSite: env.NODE_ENV === 'production' ? 'none' as const : 'lax' as const,
   maxAge,
   path: '/',
 });

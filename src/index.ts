@@ -35,7 +35,11 @@ app.use(helmet());
 // CORS - Enable Cross-Origin Resource Sharing
 app.use(
   cors({
-    origin: env.FRONTEND_URL,
+    origin: [
+      env.FRONTEND_URL,
+      'https://chirpynosh.com',
+      'https://www.chirpynosh.com'
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
