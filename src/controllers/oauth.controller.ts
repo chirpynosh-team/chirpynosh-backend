@@ -20,6 +20,7 @@ const getCookieOptions = (maxAge: number) => ({
   sameSite: env.NODE_ENV === 'production' ? 'none' as const : 'lax' as const,
   maxAge,
   path: '/',
+  ...(env.COOKIE_DOMAIN && { domain: env.COOKIE_DOMAIN }),
 });
 
 /**
@@ -33,11 +34,8 @@ const setAuthCookies = (
   // Access token: 15 minutes
   res.cookie('accessToken', accessToken, getCookieOptions(15 * 60 * 1000));
 
-  // Refresh token: 7 days
-  res.cookie('refreshToken', refreshToken, {
-    ...getCookieOptions(7 * 24 * 60 * 60 * 1000),
-    path: '/api/auth', // Only send to auth routes
-  });
+  // Refresh token: 7 days (path=/ so middleware on frontend can read it)
+  res.cookie('refreshToken', refreshToken, getCookieOptions(7 * 24 * 60 * 60 * 1000));
 };
 
 /**

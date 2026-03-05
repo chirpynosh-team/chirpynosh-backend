@@ -20,6 +20,7 @@ const envSchema = z.object({
 
   // Cookies
   COOKIE_SECRET: z.string().optional(),
+  COOKIE_DOMAIN: z.string().optional(), // e.g. '.chirpynosh.com' for cross-subdomain cookies
 
   // Frontend
   FRONTEND_URL: z.string().url().default('http://localhost:3000'),
