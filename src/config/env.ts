@@ -31,6 +31,10 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
 
+  // Email (Resend — preferred for Render/Railway)
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().optional(), // e.g. "ChirpyNosh <noreply@chirpynosh.com>"
+
   // Google OAuth
   GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required for OAuth'),
   GOOGLE_CLIENT_SECRET: z.string().optional(),

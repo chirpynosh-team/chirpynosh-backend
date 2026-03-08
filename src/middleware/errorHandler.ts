@@ -62,22 +62,26 @@ export const errorHandler: ErrorRequestHandler = (
   res: Response,
   _next: NextFunction
 ): void => {
+  // Determine if this is a routine client error (auth failures, validation, etc.)
+  const isExpectedClientError =
+    err instanceof AppError && err.statusCode >= 400 && err.statusCode < 500;
+
   // Log error details
   if (env.NODE_ENV === 'development') {
     console.error('❌ Error:', err);
-  } else {
-    // In production, log as single-line JSON for CloudWatch readability
+  } else if (!isExpectedClientError) {
+    // Only log unexpected/server errors with full detail in production
     const errorLog: Record<string, unknown> = {
       message: err.message,
       name: err.name,
       stack: err.stack,
     };
-    // Include Prisma-specific fields
     if ('code' in err) errorLog.code = (err as PrismaError).code;
     if ('meta' in err) errorLog.meta = (err as PrismaError).meta;
     if ('clientVersion' in err) errorLog.clientVersion = (err as Record<string, unknown>).clientVersion;
     console.error('❌ Error:', JSON.stringify(errorLog));
   }
+  // 4xx client errors are silently handled — no log spam
 
   let error: AppError;
 

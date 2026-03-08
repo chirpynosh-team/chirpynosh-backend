@@ -1,22 +1,46 @@
-import nodemailer from 'nodemailer';
 import { env } from '../config/env';
 
 /**
  * Email Service
- * Handles sending emails using Nodemailer
+ * Uses Resend HTTP API (works on Render/Railway where SMTP ports are blocked)
+ *
+ * Sign up at https://resend.com → get an API key → set RESEND_API_KEY env var
+ * Free tier: 100 emails/day, 3000/month
  */
 
-// Create transporter
-const createTransporter = () => {
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST ?? 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT ?? '465', 10),
-    secure: true,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+const RESEND_URL = 'https://api.resend.com/emails';
+
+interface SendEmailOptions {
+  to: string;
+  subject: string;
+  html: string;
+}
+
+/**
+ * Send an email via Resend HTTP API
+ */
+const sendEmail = async ({ to, subject, html }: SendEmailOptions): Promise<void> => {
+  const apiKey = env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.warn('⚠️ RESEND_API_KEY not set — skipping email to', to);
+    return;
+  }
+
+  const fromAddress = env.EMAIL_FROM || 'ChirpyNosh <noreply@chirpynosh.com>';
+
+  const res = await fetch(RESEND_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
     },
+    body: JSON.stringify({ from: fromAddress, to, subject, html }),
   });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Resend API error (${res.status}): ${body}`);
+  }
 };
 
 /**
@@ -27,10 +51,7 @@ export const sendOtpEmail = async (
   otp: string,
   name?: string
 ): Promise<void> => {
-  const transporter = createTransporter();
-
-  const mailOptions = {
-    from: `"ChirpyNosh" <${process.env.SMTP_USER}>`,
+  await sendEmail({
     to: email,
     subject: 'Verify Your Email - ChirpyNosh',
     html: `
@@ -69,9 +90,7 @@ export const sendOtpEmail = async (
       </body>
       </html>
     `,
-  };
-
-  await transporter.sendMail(mailOptions);
+  });
 };
 
 /**
@@ -82,10 +101,7 @@ export const sendPasswordResetEmail = async (
   otp: string,
   name?: string
 ): Promise<void> => {
-  const transporter = createTransporter();
-
-  const mailOptions = {
-    from: `"ChirpyNosh" <${process.env.SMTP_USER}>`,
+  await sendEmail({
     to: email,
     subject: 'Password Reset - ChirpyNosh',
     html: `
@@ -124,9 +140,7 @@ export const sendPasswordResetEmail = async (
       </body>
       </html>
     `,
-  };
-
-  await transporter.sendMail(mailOptions);
+  });
 };
 
 interface PickupOtpData {
@@ -145,8 +159,6 @@ interface PickupOtpData {
  * Send pickup OTP email for food claims
  */
 export const sendPickupOtp = async (data: PickupOtpData): Promise<void> => {
-  const transporter = createTransporter();
-  
   const formatTime = (date: Date) => {
     return new Date(date).toLocaleString('en-US', {
       weekday: 'short',
@@ -157,8 +169,7 @@ export const sendPickupOtp = async (data: PickupOtpData): Promise<void> => {
     });
   };
 
-  const mailOptions = {
-    from: `"ChirpyNosh" <${process.env.SMTP_USER}>`,
+  await sendEmail({
     to: data.email,
     subject: `Your Pickup OTP - ${data.listingTitle} - ChirpyNosh`,
     html: `
@@ -204,7 +215,5 @@ export const sendPickupOtp = async (data: PickupOtpData): Promise<void> => {
       </body>
       </html>
     `,
-  };
-
-  await transporter.sendMail(mailOptions);
+  });
 };

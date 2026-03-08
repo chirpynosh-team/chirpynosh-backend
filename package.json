@@ -26,11 +26,11 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
-    "nodemailer": "^7.0.13",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "passport-microsoft": "^2.1.0",
     "pg": "^8.17.2",
+    "resend": "^6.9.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -41,7 +41,6 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.0.0",
     "@types/node": "^25.1.0",
-    "@types/nodemailer": "^7.0.9",
     "@types/passport": "^1.0.17",
     "@types/passport-google-oauth20": "^2.0.17",
     "@types/pg": "^8.16.0",
