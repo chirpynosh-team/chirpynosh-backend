@@ -33,13 +33,22 @@ app.set('trust proxy', 1);
 app.use(helmet());
 
 // CORS - Enable Cross-Origin Resource Sharing
+const allowedOrigins = [
+  env.FRONTEND_URL.replace(/\/+$/, ''),  // strip trailing slash
+  'https://chirpynosh.com',
+  'https://www.chirpynosh.com',
+];
+console.log('🔒 CORS allowed origins:', allowedOrigins);
+
 app.use(
   cors({
-    origin: [
-      env.FRONTEND_URL,
-      'https://chirpynosh.com',
-      'https://www.chirpynosh.com'
-    ],
+    origin: (origin, callback) => {
+      // Allow requests with no origin (server-to-server, curl, health checks)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      console.warn(`⛔ CORS blocked origin: ${origin}`);
+      callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
